@@ -161,7 +161,13 @@ class ReseñaController extends Controller
     public function getReseniaByTrabajId($id)
     {
         // Buscar al trabajador por su ID junto con sus reseñas, calificación e información del usuario
-        $trabajador = Trabajador::with('reseñas.calificacion', 'reseñas.contrato.user')->find($id);
+        $trabajador = Trabajador::with([
+            'reseñas' => function ($query) {
+                $query->orderBy('created_at', 'desc');
+            },
+            'reseñas.calificacion', 
+            'reseñas.contrato.user'
+            ])->find($id);
     
         // Verificar si el trabajador existe
         if (!$trabajador) {
@@ -243,5 +249,51 @@ public function getReseniaByUserId($userId)
         'status' => 200
     ], 200);
 }
+public function getReseniaById($id)
+{
+    // Buscar la reseña con sus relaciones
+    $reseña = Reseña::with(['calificacion', 'contrato.user', 'contrato.trabajador.user'])
+        ->find($id);
+
+    // Verificar si existe
+    if (!$reseña) {
+        return response()->json([
+            'message' => 'Reseña no encontrada',
+            'status' => 404,
+        ], 404);
+    }
+
+    // Decodificar y formatear las imágenes
+    $images = json_decode($reseña->images, true);
+    if ($images && is_array($images)) {
+        foreach ($images as $key => $image) {
+            $images[$key] = asset(Storage::url($image));
+        }
+        $reseña->images = $images;
+    }
+
+    // Formatear imagen de perfil del cliente (user)
+    if ($reseña->contrato && $reseña->contrato->user && $reseña->contrato->user->profile_picture) {
+        $profile = $reseña->contrato->user->profile_picture;
+        if ($profile && !str_starts_with($profile, 'http')) {
+            $reseña->contrato->user->profile_picture = asset(Storage::url($profile));
+        }
+    }
+
+    // Formatear imagen de perfil del trabajador
+    if ($reseña->contrato && $reseña->contrato->trabajador && $reseña->contrato->trabajador->user) {
+        $workerProfile = $reseña->contrato->trabajador->user->profile_picture;
+        if ($workerProfile && !str_starts_with($workerProfile, 'http')) {
+            $reseña->contrato->trabajador->user->profile_picture = asset(Storage::url($workerProfile));
+        }
+    }
+
+    // Retornar la reseña completa con sus relaciones y rutas formateadas
+    return response()->json([
+        'reseña' => $reseña,
+        'status' => 200,
+    ], 200);
+}
+
 
 }
